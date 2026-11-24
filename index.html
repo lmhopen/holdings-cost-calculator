@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>持仓成本计算</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; max-width: 560px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 20px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  input { flex: 1; padding: 6px; box-sizing: border-box; }
+  button { padding: 6px 14px; cursor: pointer; }
+  .del { background: #eee; border: 1px solid #ccc; }
+  #result { margin-top: 16px; padding: 12px; background: #f6f8fa; border-radius: 6px; line-height: 1.8; display: none; }
+  #result b { color: #d97706; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>持仓成本计算</h1>
+
+<div id="rows"></div>
+
+<div class="row">
+  <input type="number" id="current" placeholder="当前/目标价格（选填，用于算持仓价值和盈亏）">
+</div>
+
+<button onclick="addRow()">＋ 添加补仓</button>
+<button onclick="calc()">计算</button>
+<button class="del" onclick="clearAll()">清空</button>
+
+<div id="result"></div>
+
+<script>
+// 添加一行输入（买入点位 + 投入金额）
+function addRow() {
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.innerHTML =
+    '<input type="number" placeholder="买入价格" class="price">' +
+    '<input type="number" placeholder="投入金额" class="amount">' +
+    '<button class="del">删除</button>';
+  div.querySelector('.del').onclick = () => { div.remove(); save(); };
+  document.getElementById('rows').appendChild(div);
+}
+
+// 计算：总投入、总持仓、摊薄后平均成本
+function calc() {
+  let coins = 0, cost = 0;
+  document.querySelectorAll('#rows .row').forEach(row => {
+    const p = parseFloat(row.querySelector('.price').value);
+    const a = parseFloat(row.querySelector('.amount').value);
+    if (p > 0 && a > 0) {   // 跳过没填或填错的行
+      coins += a / p;
+      cost += a;
+    }
+  });
+  const box = document.getElementById('result');
+  if (coins === 0) {
+    box.style.display = 'block';
+    box.textContent = '请至少填写一行有效的点位和金额';
+    return;
+  }
+  const avg = cost / coins;
+  let html =
+    '总投入：' + cost.toLocaleString() + '<br>' +
+    '总持仓：' + coins.toFixed(8) + '<br>' +
+    '摊薄后平均成本：<b>' + avg.toFixed(2) + '</b>';
+  // 填了当前价格才算持仓价值和盈亏
+  const cur = parseFloat(document.getElementById('current').value);
+  if (cur > 0) {
+    const value = coins * cur;
+    const profit = value - cost;
+    const pct = (profit / cost * 100).toFixed(2);
+    html += '<br>当前持仓价值：' + value.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
+      '<br>浮' + (profit >= 0 ? '盈' : '亏') + '：' +
+      '<b>' + Math.abs(profit).toLocaleString(undefined, { maximumFractionDigits: 2 }) +
+      '（' + pct + '%）</b>';
+  }
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+// ===== 保存 / 恢复（localStorage 自动保存） =====
+const KEY = 'btc-cost';
+function save() {
+  const rows = [...document.querySelectorAll('#rows .row')].map(r => [
+    r.querySelector('.price').value,
+    r.querySelector('.amount').value
+  ]);
+  localStorage.setItem(KEY, JSON.stringify({ rows: rows, cur: document.getElementById('current').value }));
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (!d || !d.rows || !d.rows.length) return false;
+    d.rows.forEach(function (v) {
+      addRow();
+      const r = document.querySelector('#rows .row:last-child');
+      r.querySelector('.price').value = v[0];
+      r.querySelector('.amount').value = v[1];
+    });
+    document.getElementById('current').value = d.cur || '';
+    return true;
+  } catch (e) { return false; }
+}
+function clearAll() {
+  localStorage.removeItem(KEY);
+  document.getElementById('rows').innerHTML = '';
+  document.getElementById('current').value = '';
+  document.getElementById('result').style.display = 'none';
+  addRow();
+  addRow();
+}
+
+// 任何输入变化都自动保存
+document.addEventListener('input', save);
+
+// 启动：有保存过的数据就恢复，否则给默认两行
+if (!load()) {
+  addRow();
+  addRow();
+}
+</script>
+</body>
+</html>
